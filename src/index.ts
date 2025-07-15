@@ -1,67 +1,179 @@
-import { DurableObject } from "cloudflare:workers";
+import { Agent, type AgentNamespace, type Connection, type ConnectionContext, routeAgentRequest } from 'agents';
+import { RawData } from 'ws';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { handleFunctionCall, isOpen, jsonSend, parseMessage } from './utils';
 
-/**
- * Welcome to Cloudflare Workers! This is your first Durable Objects application.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your Durable Object in action
- * - Run `npm run deploy` to publish your application
- *
- * Bind resources to your worker in `wrangler.jsonc`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/durable-objects
- */
+type Env = {
+	MyAgent: AgentNamespace<MyAgent>;
+	OPENAI_API_KEY: string;
+	STRIPE_API_KEY: string;
+};
 
-
-/** A Durable Object's behavior is defined in an exported Javascript class */
-export class MyDurableObject extends DurableObject {
-	/**
-	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
-	 * 	`DurableObjectStub::get` for a given identifier (no-op constructors can be omitted)
-	 *
-	 * @param ctx - The interface for interacting with Durable Object state
-	 * @param env - The interface to reference bindings declared in wrangler.jsonc
-	 */
-	constructor(ctx: DurableObjectState, env: Env) {
-		super(ctx, env);
+export class MyAgent extends Agent<Env> {
+	// don't use hibernation, the dependencies will manually add their own handlers
+	static options = { hibernate: false };
+	mcpTools: any;
+	mcpClient: any;
+	async onStart() {
+		this.mcpClient = new Client({
+			name: 'stripe',
+			version: '1.0.0',
+		});
+		const transport = new StreamableHTTPClientTransport(new URL('https://mcp.stripe.com'), {
+			requestInit: {
+				headers: {
+					Authorization: `Bearer ${this.env.STRIPE_API_KEY}`,
+				},
+			},
+		});
+		await this.mcpClient.connect(transport);
+		const tools = await this.mcpClient.listTools();
+		this.mcpTools = tools.tools
+			.filter((i: any) =>
+				[
+					'search_documentation',
+					'create_customer',
+					'list_customers',
+					'list_products',
+					'list_prices',
+					'create_payment_link',
+					'create_invoice',
+					'list_invoices',
+					'create_invoice_item',
+					'finalize_invoice',
+					'create_refund',
+					'list_payment_intents',
+				].includes(i.name),
+			)
+			.map((i: any) => {
+				i.type = 'function';
+				i.parameters = i.inputSchema;
+				i.inputSchema = undefined as any;
+				return i;
+			});
 	}
+	async onConnect(connection: Connection, ctx: ConnectionContext) {
+		if (ctx.request.url.includes('media-stream')) {
+			let streamSid: any;
+			const modelConn = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17', [
+				'realtime',
+				'openai-insecure-api-key.' + this.env.OPENAI_API_KEY,
+				'openai-beta.realtime-v1',
+			]);
 
-	/**
-	 * The Durable Object exposes an RPC method sayHello which will be invoked when when a Durable
-	 *  Object instance receives a request from a Worker via the same method invocation on the stub
-	 *
-	 * @param name - The name provided to a Durable Object instance from a Worker
-	 * @returns The greeting to be sent back to the Worker
-	 */
-	async sayHello(name: string): Promise<string> {
-		return `Hello, ${name}!`;
+			modelConn.addEventListener('open', () => {
+				jsonSend(modelConn, {
+					type: 'session.update',
+					session: {
+						instructions: 'You are a Stripe store agent. Always call the tools to respond to the users request',
+						modalities: ['text', 'audio'],
+						turn_detection: { type: 'server_vad' },
+						voice: 'ash',
+						input_audio_transcription: { model: 'whisper-1' },
+						input_audio_format: 'g711_ulaw',
+						output_audio_format: 'g711_ulaw',
+						tools: this.mcpTools,
+					},
+				});
+			});
+
+			modelConn.addEventListener('message', (event) => {
+				const msg = parseMessage(event.data as RawData);
+				if (!msg) return;
+
+				switch (msg.type) {
+					case 'input_audio_buffer.speech_started':
+						break;
+
+					case 'response.audio.delta':
+						jsonSend(connection, {
+							event: 'media',
+							streamSid,
+							media: { payload: msg.delta },
+						});
+
+						jsonSend(connection, {
+							event: 'mark',
+							streamSid,
+						});
+						break;
+
+					case 'response.output_item.done': {
+						const { item } = msg;
+						if (item.type === 'function_call') {
+							handleFunctionCall(item, this.mcpClient, this.mcpTools)
+								.then((output) => {
+									if (modelConn) {
+										jsonSend(modelConn, {
+											type: 'conversation.item.create',
+											item: {
+												type: 'function_call_output',
+												call_id: item.call_id,
+												output: JSON.stringify(output),
+											},
+										});
+										jsonSend(modelConn, { type: 'response.create' });
+									}
+								})
+								.catch((err) => {
+									console.error('Error handling function call:', err);
+								});
+						}
+						break;
+					}
+				}
+			});
+
+			connection.addEventListener('message', (event) => {
+				const msg = parseMessage(event.data as RawData);
+				if (!msg) return;
+
+				switch (msg.event) {
+					case 'start':
+						streamSid = msg.start.streamSid;
+						break;
+					case 'media':
+						jsonSend(modelConn, {
+							type: 'input_audio_buffer.append',
+							audio: msg.media.payload,
+						});
+						break;
+					case 'close':
+						break;
+				}
+			});
+		}
 	}
+	onMessage() {} // just a blank, the transport layer will add its own handlers
+	onClose(connection: Connection) {
+		connection.close();
+	}
+	// async onError(connection: Connection, error: unknown) {
+	// 	console.error(error);
+	// }
 }
 
 export default {
-	/**
-	 * This is the standard fetch handler for a Cloudflare Worker
-	 *
-	 * @param request - The request submitted to the Worker from the client
-	 * @param env - The interface to reference bindings declared in wrangler.jsonc
-	 * @param ctx - The execution context of the Worker
-	 * @returns The response to be sent back to the client
-	 */
-	async fetch(request, env, ctx): Promise<Response> {
-		// Create a `DurableObjectId` for an instance of the `MyDurableObject`
-		// class named "foo". Requests from all Workers to the instance named
-		// "foo" will go to a single globally unique Durable Object instance.
-		const id: DurableObjectId = env.MY_DURABLE_OBJECT.idFromName("foo");
-
-		// Create a stub to open a communication channel with the Durable
-		// Object instance.
-		const stub = env.MY_DURABLE_OBJECT.get(id);
-
-		// Call the `sayHello()` RPC method on the stub to invoke the method on
-		// the remote Durable Object instance
-		const greeting = await stub.sayHello("world");
-
-		return new Response(greeting);
+	async fetch(request: Request, env: Env) {
+		const url = new URL(request.url);
+		const path = url.pathname;
+		console.log('host: ', url.host);
+		if (path === '/incoming-call' && request.method === 'POST') {
+			const twimlResponse = `
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Connected</Say>
+    <Connect>
+        <Stream url="wss://${url.host}/agents/my-agent/123/media-stream" />
+    </Connect>
+</Response>`.trim();
+			return new Response(twimlResponse, {
+				headers: {
+					'Content-Type': 'text/xml',
+				},
+			});
+		}
+		return (await routeAgentRequest(request, env, { cors: true })) || new Response('Not found', { status: 404 });
 	},
 } satisfies ExportedHandler<Env>;
