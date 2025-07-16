@@ -16,6 +16,7 @@
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.15.1",
 		"agents": "^0.0.106",
+		"resend": "^4.6.0",
 		"ws": "^8.18.3"
 	}
 }

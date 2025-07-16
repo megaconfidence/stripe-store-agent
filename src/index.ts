@@ -3,11 +3,14 @@ import { RawData } from 'ws';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { handleFunctionCall, isOpen, jsonSend, parseMessage } from './utils';
+import { emailToolSchema } from './email';
 
 type Env = {
 	MyAgent: AgentNamespace<MyAgent>;
 	OPENAI_API_KEY: string;
 	STRIPE_API_KEY: string;
+	RESEND_API_KEY: string;
+	RESEND_FROM_EMAIL: string;
 };
 
 export class MyAgent extends Agent<Env> {
@@ -52,6 +55,7 @@ export class MyAgent extends Agent<Env> {
 				i.inputSchema = undefined as any;
 				return i;
 			});
+		this.mcpTools.push(emailToolSchema);
 	}
 	async onConnect(connection: Connection, ctx: ConnectionContext) {
 		if (ctx.request.url.includes('media-stream')) {
@@ -66,7 +70,7 @@ export class MyAgent extends Agent<Env> {
 				jsonSend(modelConn, {
 					type: 'session.update',
 					session: {
-						instructions: 'You are a Stripe store agent. Always call the tools to respond to the users request',
+						instructions: 'You are a Stripe Store agent. Always call the tools to respond to the users request',
 						modalities: ['text', 'audio'],
 						turn_detection: { type: 'server_vad' },
 						voice: 'ash',
@@ -102,7 +106,7 @@ export class MyAgent extends Agent<Env> {
 					case 'response.output_item.done': {
 						const { item } = msg;
 						if (item.type === 'function_call') {
-							handleFunctionCall(item, this.mcpClient, this.mcpTools)
+							handleFunctionCall(item, this.mcpClient, this.mcpTools, this.env)
 								.then((output) => {
 									if (modelConn) {
 										jsonSend(modelConn, {
