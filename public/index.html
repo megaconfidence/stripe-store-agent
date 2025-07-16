@@ -1,20 +1,105 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Hello, World!</title>
+		<title>AI Assistant Chat</title>
+		<script src="https://cdn.tailwindcss.com"></script>
 	</head>
-	<body>
-		<h1 id="heading"></h1>
-		<p>This page comes from a static asset stored at `public/index.html` as configured in `wrangler.jsonc`.</p>
+	<body class="bg-gray-100 flex items-center justify-center h-screen">
+		<div class="w-full max-w-2xl h-[90vh] flex flex-col bg-white rounded-xl shadow-lg p-4">
+			<div class="border-b pb-2 mb-4">
+				<h1 class="text-2xl font-bold text-gray-800">Stripe Store Agent</h1>
+				<p id="status" class="text-sm text-gray-500">Connecting...</p>
+			</div>
+
+			<div id="chat-container" class="flex-grow space-y-4 overflow-y-auto p-4"></div>
+		</div>
+
 		<script>
-			fetch('/message')
-				.then((resp) => resp.text())
-				.then((text) => {
-					const h1 = document.getElementById('heading');
-					h1.textContent = text;
+			const chatContainer = document.getElementById('chat-container');
+			const statusElement = document.getElementById('status');
+
+			// Use a Set to store the IDs of messages already displayed.
+			// This is highly efficient for checking if a message has been seen before.
+			const displayedMessageIds = new Set();
+
+			function createMessageElement(message) {
+				// Determine styling based on the role (user or assistant)
+				const isUser = message.role === 'user';
+				const messageWrapper = document.createElement('div');
+				messageWrapper.classList.add('flex', isUser ? 'justify-end' : 'justify-start');
+
+				const messageBubble = document.createElement('div');
+				messageBubble.classList.add(
+					'max-w-md',
+					'p-3',
+					'rounded-xl',
+					isUser ? 'bg-blue-500' : 'bg-gray-200',
+					isUser ? 'text-white' : 'text-gray-800',
+				);
+				messageBubble.textContent = message.content;
+
+				messageWrapper.appendChild(messageBubble);
+				return messageWrapper;
+			}
+
+			function connectWebSocket() {
+				// Establish the WebSocket connection
+				const socket = new WebSocket(
+					`${window.location.protocol === 'http:' ? 'ws' : 'wss'}://${window.location.host}/agents/my-agent/123/media-stream`,
+				);
+
+				socket.addEventListener('open', () => {
+					console.log('WebSocket connection established. ✅');
+					statusElement.textContent = 'Connected';
+					statusElement.style.color = 'green';
 				});
+
+				socket.addEventListener('message', (event) => {
+					try {
+						const data = JSON.parse(event.data);
+						const history = data.state?.history;
+
+						// Ensure history is an array before processing
+						if (history && Array.isArray(history)) {
+							history.forEach((message) => {
+								// Check if the message ID has NOT been seen before
+								if (!displayedMessageIds.has(message.id)) {
+									// 1. Add the new message ID to our Set
+									displayedMessageIds.add(message.id);
+
+									// 2. Create and append the new message element to the chat
+									const messageElement = createMessageElement(message);
+									chatContainer.appendChild(messageElement);
+
+									// 3. Scroll to the bottom to show the latest message
+									chatContainer.scrollTop = chatContainer.scrollHeight;
+								}
+							});
+						}
+					} catch (error) {
+						console.error('Error parsing message data:', error);
+					}
+				});
+
+				socket.addEventListener('error', (event) => {
+					console.error('WebSocket error:', event);
+					statusElement.textContent = 'Connection Error';
+					statusElement.style.color = 'red';
+				});
+
+				socket.addEventListener('close', () => {
+					console.log('WebSocket connection closed. Attempting to reconnect...');
+					statusElement.textContent = 'Disconnected. Retrying...';
+					statusElement.style.color = 'orange';
+					// Optional: Attempt to reconnect after a delay
+					setTimeout(connectWebSocket, 3000);
+				});
+			}
+
+			// Initial connection attempt
+			connectWebSocket();
 		</script>
 	</body>
 </html>

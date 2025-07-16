@@ -13,12 +13,24 @@ type Env = {
 	RESEND_FROM_EMAIL: string;
 };
 
-export class MyAgent extends Agent<Env> {
+interface TranscriptMsg {
+	id: string;
+	role: string;
+	content: string;
+}
+interface AgentState {
+	history: TranscriptMsg[];
+}
+export class MyAgent extends Agent<Env, AgentState> {
 	// don't use hibernation, the dependencies will manually add their own handlers
 	static options = { hibernate: false };
 	mcpTools: any;
 	mcpClient: any;
+	updateHistory(transcript: TranscriptMsg) {
+		this.setState({ ...this.state, history: [...this.state.history, transcript] });
+	}
 	async onStart() {
+		this.setState({ history: [] });
 		this.mcpClient = new Client({
 			name: 'stripe',
 			version: '1.0.0',
@@ -90,6 +102,12 @@ export class MyAgent extends Agent<Env> {
 					case 'input_audio_buffer.speech_started':
 						break;
 
+					case 'conversation.item.input_audio_transcription.completed':
+						this.updateHistory({ id: crypto.randomUUID(), role: 'user', content: msg.transcript });
+						break;
+					case 'response.audio_transcript.done':
+						this.updateHistory({ id: crypto.randomUUID(), role: 'assistant', content: msg.transcript });
+						break;
 					case 'response.audio.delta':
 						jsonSend(connection, {
 							event: 'media',
