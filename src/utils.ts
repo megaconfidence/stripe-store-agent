@@ -1,15 +1,17 @@
-import { RawData } from 'ws';
 import { emailToolHandler } from './email';
-export function parseMessage(data: RawData): any {
+
+export function parseMessage(data: ArrayBuffer): any {
 	try {
 		return JSON.parse(data.toString());
 	} catch {
 		return null;
 	}
 }
-export function isOpen(ws?: WebSocket): ws is WebSocket {
+
+function isOpen(ws?: WebSocket): ws is WebSocket {
 	return !!ws && ws.readyState === WebSocket.OPEN;
 }
+
 export function jsonSend(ws: WebSocket | undefined, obj: unknown) {
 	if (!isOpen(ws)) return;
 	ws.send(JSON.stringify(obj));
@@ -17,9 +19,11 @@ export function jsonSend(ws: WebSocket | undefined, obj: unknown) {
 
 export async function handleFunctionCall(item: { name: string; arguments: string }, mcpClient: any, mcpTools: any, env: Env) {
 	console.log('Handling function call:', item);
+
 	if (item.name === 'send_email_to_customer') {
 		return await emailToolHandler(env, JSON.parse(item.arguments));
 	}
+
 	const fnDef = mcpTools.find((i: any) => i.name === item.name);
 	if (!fnDef) {
 		throw new Error(`No handler found for function: ${item.name}`);

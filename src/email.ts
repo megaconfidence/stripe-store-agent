@@ -1,4 +1,5 @@
 import { CreateEmailResponseSuccess, ErrorResponse, Resend } from 'resend';
+
 export const emailToolSchema = {
 	name: 'send_email_to_customer',
 	description:
@@ -21,10 +22,12 @@ export const emailToolSchema = {
 		required: ['email', 'subject', 'html'],
 	},
 };
+
 interface EmailStatus {
 	data: CreateEmailResponseSuccess | null;
 	error: ErrorResponse | null;
 }
+
 export const emailToolHandler = async (env: Env, args: { email: string; subject: string; html: string }): Promise<EmailStatus> => {
 	const resend = new Resend(env.RESEND_API_KEY);
 	return resend.emails.send({

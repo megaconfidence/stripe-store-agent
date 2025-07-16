@@ -1,8 +1,7 @@
 import { Agent, type AgentNamespace, type Connection, type ConnectionContext, routeAgentRequest } from 'agents';
-import { RawData } from 'ws';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { handleFunctionCall, isOpen, jsonSend, parseMessage } from './utils';
+import { handleFunctionCall, jsonSend, parseMessage } from './utils';
 import { emailToolSchema } from './email';
 
 type Env = {
@@ -18,17 +17,16 @@ interface TranscriptMsg {
 	role: string;
 	content: string;
 }
+
 interface AgentState {
 	history: TranscriptMsg[];
 }
+
 export class MyAgent extends Agent<Env, AgentState> {
 	// don't use hibernation, the dependencies will manually add their own handlers
 	static options = { hibernate: false };
 	mcpTools: any;
 	mcpClient: any;
-	updateHistory(transcript: TranscriptMsg) {
-		this.setState({ ...this.state, history: [...this.state.history, transcript] });
-	}
 	async onStart() {
 		this.setState({ history: [] });
 		this.mcpClient = new Client({
@@ -82,7 +80,8 @@ export class MyAgent extends Agent<Env, AgentState> {
 				jsonSend(modelConn, {
 					type: 'session.update',
 					session: {
-						instructions: 'You are a Stripe Store agent. Always call the tools to respond to the users request',
+						instructions:
+							"You are a Stripe store sales agent. Always call the tools to respond to the customer's request, and be super concise in your responses",
 						modalities: ['text', 'audio'],
 						turn_detection: { type: 'server_vad' },
 						voice: 'ash',
@@ -95,13 +94,10 @@ export class MyAgent extends Agent<Env, AgentState> {
 			});
 
 			modelConn.addEventListener('message', (event) => {
-				const msg = parseMessage(event.data as RawData);
+				const msg = parseMessage(event.data as ArrayBuffer);
 				if (!msg) return;
 
 				switch (msg.type) {
-					case 'input_audio_buffer.speech_started':
-						break;
-
 					case 'conversation.item.input_audio_transcription.completed':
 						this.updateHistory({ id: crypto.randomUUID(), role: 'user', content: msg.transcript });
 						break;
@@ -114,7 +110,6 @@ export class MyAgent extends Agent<Env, AgentState> {
 							streamSid,
 							media: { payload: msg.delta },
 						});
-
 						jsonSend(connection, {
 							event: 'mark',
 							streamSid,
@@ -148,7 +143,7 @@ export class MyAgent extends Agent<Env, AgentState> {
 			});
 
 			connection.addEventListener('message', (event) => {
-				const msg = parseMessage(event.data as RawData);
+				const msg = parseMessage(event.data as ArrayBuffer);
 				if (!msg) return;
 
 				switch (msg.event) {
@@ -167,33 +162,33 @@ export class MyAgent extends Agent<Env, AgentState> {
 			});
 		}
 	}
+	updateHistory(transcript: TranscriptMsg) {
+		this.setState({ ...this.state, history: [...this.state.history, transcript] });
+	}
 	onMessage() {} // just a blank, the transport layer will add its own handlers
 	onClose(connection: Connection) {
 		connection.close();
 	}
-	// async onError(connection: Connection, error: unknown) {
-	// 	console.error(error);
-	// }
+	async onError(_error: unknown): Promise<void> {
+		console.log('Connection closed');
+	}
 }
 
 export default {
 	async fetch(request: Request, env: Env) {
 		const url = new URL(request.url);
 		const path = url.pathname;
-		console.log('host: ', url.host);
 		if (path === '/incoming-call' && request.method === 'POST') {
 			const twimlResponse = `
-<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say>Connected</Say>
-    <Connect>
-        <Stream url="wss://${url.host}/agents/my-agent/123/media-stream" />
-    </Connect>
-</Response>`.trim();
+			<?xml version="1.0" encoding="UTF-8"?>
+			<Response>
+					<Say>Connected</Say>
+					<Connect>
+							<Stream url="wss://${url.host}/agents/my-agent/123/media-stream" />
+					</Connect>
+			</Response>`.trim();
 			return new Response(twimlResponse, {
-				headers: {
-					'Content-Type': 'text/xml',
-				},
+				headers: { 'Content-Type': 'text/xml' },
 			});
 		}
 		return (await routeAgentRequest(request, env, { cors: true })) || new Response('Not found', { status: 404 });
