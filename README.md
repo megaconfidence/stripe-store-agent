@@ -38,7 +38,6 @@ A serverless agent that acts as a Stripe store sales assistant, leveraging OpenA
    ```
 
 3. Set environment variables in `.dev.vars`:
-
    - `OPENAI_API_KEY`
    - `STRIPE_API_KEY`
    - `RESEND_API_KEY`
@@ -57,13 +56,3 @@ Deploy to Cloudflare Workers:
 ```bash
 npm run deploy
 ```
-
-## Project Structure
-
-- `src/index.ts` — Main agent logic and request handler
-- `src/email.ts` — Email tool schema
-- `src/utils.ts` — Utility functions
-
-## License
-
-MIT
