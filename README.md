@@ -1,0 +1,69 @@
+# Stripe Store Agent
+
+A serverless agent that acts as a Stripe store sales assistant, leveraging OpenAI and Stripe APIs to handle customer requests via text or audio. Customers can connect to the agent via a phone call using Twilio. The agent can search documentation, manage customers, handle payments, and send emails, all through tool calls.
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/megaconfidence/stripe-store-agent)
+
+## Features
+
+![How it works](./arch.png)
+
+- Real-time conversational agent (text/audio) using OpenAI GPT-4o.
+- Connect to the agent via a phone call using Twilio.
+- Integrates with Stripe for store/customer/payment management.
+- Supports tool calls for Stripe operations and documentation search.
+- Email sending via Resend API.
+- Deployable as a Cloudflare Worker.
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js
+- Cloudflare Wrangler CLI
+
+### Setup
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone https://github.com/megaconfidence/stripe-store-agent.git
+   cd stripe-store-agent
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. Set environment variables in `.dev.vars`:
+
+   - `OPENAI_API_KEY`
+   - `STRIPE_API_KEY`
+   - `RESEND_API_KEY`
+   - `RESEND_FROM_EMAIL`
+
+4. Start the development server:
+
+   ```bash
+   npm run dev
+   ```
+
+## Deployment
+
+Deploy to Cloudflare Workers:
+
+```bash
+npm run deploy
+```
+
+## Project Structure
+
+- `src/index.ts` — Main agent logic and request handler
+- `src/email.ts` — Email tool schema
+- `src/utils.ts` — Utility functions
+
+## License
+
+MIT

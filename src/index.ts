@@ -81,7 +81,7 @@ export class MyAgent extends Agent<Env, AgentState> {
 					type: 'session.update',
 					session: {
 						instructions:
-							"You are a Stripe store sales agent. Always call the tools to respond to the customer's request, and be super concise in your responses",
+							"You are a Stripe store sales agent. Always call the tools to respond to the customer's request, and be super concise in your responses. Start the conversation with a friendly greeting.",
 						modalities: ['text', 'audio'],
 						turn_detection: { type: 'server_vad' },
 						voice: 'ash',
