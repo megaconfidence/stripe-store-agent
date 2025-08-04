@@ -70,7 +70,7 @@ export class MyAgent extends Agent<Env, AgentState> {
 	async onConnect(connection: Connection, ctx: ConnectionContext) {
 		if (ctx.request.url.includes('media-stream')) {
 			let streamSid: any;
-			const modelConn = new WebSocket('wss://api.openai.com/v1/realtime', [
+			const modelConn = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2025-06-03', [
 				'realtime',
 				'openai-insecure-api-key.' + this.env.OPENAI_API_KEY,
 				'openai-beta.realtime-v1',
@@ -83,17 +83,17 @@ export class MyAgent extends Agent<Env, AgentState> {
 						instructions:
 							"You are a Stripe store sales agent. Always call the tools to respond to the customer's request, and be super concise in your responses. Start the conversation with a friendly greeting.",
 						modalities: ['text', 'audio'],
-						// turn_detection: { type: 'server_vad' },
-						turn_detection: {
-							type: 'semantic_vad',
-							eagerness: 'low',
-							create_response: true,
-							interrupt_response: true,
-						},
-						input_audio_noise_reduction: 'near_field',
-						model: 'gpt-4o-realtime-preview-2025-06-03',
-						voice: 'ash',
-						input_audio_transcription: { model: 'gpt-4o-transcribe' },
+						turn_detection: { type: 'server_vad' },
+						// turn_detection: {
+						// 	type: 'semantic_vad',
+						// 	eagerness: 'low',
+						// 	create_response: true,
+						// 	interrupt_response: true,
+						// },
+						// input_audio_noise_reduction: 'near_field',
+						// model: 'gpt-4o-realtime-preview-2025-06-03',
+						voice: 'ballad',
+						input_audio_transcription: { model: 'gpt-4o-transcribe', language: 'en' },
 						input_audio_format: 'g711_ulaw',
 						output_audio_format: 'g711_ulaw',
 						tools: this.mcpTools,
