@@ -63,8 +63,10 @@ export class MyAgent extends Agent<Env, AgentState> {
 				i.type = 'function';
 				i.parameters = i.inputSchema;
 				i.inputSchema = undefined as any;
+				// i.annotations = undefined as any;
 				return i;
 			});
+		console.log(this.mcpTools);
 		this.mcpTools.push(emailToolSchema);
 	}
 	async onConnect(connection: Connection, ctx: ConnectionContext) {
@@ -77,6 +79,7 @@ export class MyAgent extends Agent<Env, AgentState> {
 			]);
 
 			modelConn.addEventListener('open', () => {
+				console.log('connected to model');
 				jsonSend(modelConn, {
 					type: 'session.update',
 					session: {
@@ -92,7 +95,8 @@ export class MyAgent extends Agent<Env, AgentState> {
 						// },
 						// input_audio_noise_reduction: 'near_field',
 						// model: 'gpt-4o-realtime-preview-2025-06-03',
-						voice: 'ballad',
+						voice: 'ash',
+						// voice: 'ballad',
 						input_audio_transcription: { model: 'gpt-4o-transcribe', language: 'en' },
 						input_audio_format: 'g711_ulaw',
 						output_audio_format: 'g711_ulaw',
@@ -102,10 +106,14 @@ export class MyAgent extends Agent<Env, AgentState> {
 			});
 
 			modelConn.addEventListener('message', (event) => {
+				console.log('received model message');
 				const msg = parseMessage(event.data as ArrayBuffer);
+				console.log({ msg });
 				if (!msg) return;
 
 				switch (msg.type) {
+					case 'error':
+						throw new Error(JSON.stringify(msg.error));
 					case 'conversation.item.input_audio_transcription.completed':
 						this.updateHistory({ id: crypto.randomUUID(), role: 'user', content: msg.transcript });
 						break;
