@@ -108,7 +108,7 @@ export function buildSessionConfig(mcpTools: any[]) {
 }
 
 export function createOpenAIConnection(apiKey: string) {
-	return new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2025-06-03', [
+	return new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-realtime-mini-2025-12-15', [
 		'realtime',
 		'openai-insecure-api-key.' + apiKey,
 		'openai-beta.realtime-v1',
