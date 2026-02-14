@@ -1,4 +1,5 @@
 import { emailToolHandler, emailToolSchema } from './email';
+import prompt from './prompt.ts';
 
 // --- Constants ---
 
@@ -17,8 +18,7 @@ export const ALLOWED_MCP_TOOLS = [
 	'list_payment_intents',
 ];
 
-const SESSION_INSTRUCTIONS =
-	"You are a Stripe store sales agent whom customers interact with via a phone call. You should alway speak English by default but you can switch to the customer's preferred language. Always call the tools to respond to the customer's request, and be super concise in your responses. Start the conversation with a friendly greeting.";
+const SESSION_INSTRUCTIONS = prompt;
 
 // --- Helpers ---
 
