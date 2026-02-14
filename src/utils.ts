@@ -1,4 +1,26 @@
-import { emailToolHandler } from './email';
+import { emailToolHandler, emailToolSchema } from './email';
+
+// --- Constants ---
+
+export const ALLOWED_MCP_TOOLS = [
+	'search_documentation',
+	'create_customer',
+	'list_customers',
+	'list_products',
+	'list_prices',
+	'create_payment_link',
+	'create_invoice',
+	'list_invoices',
+	'create_invoice_item',
+	'finalize_invoice',
+	'create_refund',
+	'list_payment_intents',
+];
+
+const SESSION_INSTRUCTIONS =
+	"You are a Stripe store sales agent whom users interact with via a phone call. You should alway speak English by default. Always call the tools to respond to the customer's request, and be super concise in your responses. Start the conversation with a friendly greeting.";
+
+// --- Helpers ---
 
 export function parseMessage(data: ArrayBuffer): any {
 	try {
@@ -51,4 +73,54 @@ export async function handleFunctionCall(item: { name: string; arguments: string
 			error: `Error running function ${item.name}: ${err.message}`,
 		});
 	}
+}
+
+// --- Builders ---
+
+export function transformMcpTools(tools: any[]) {
+	const filtered = tools
+		.filter((i: any) => ALLOWED_MCP_TOOLS.includes(i.name))
+		.map((i: any) => {
+			i.type = 'function';
+			i.parameters = i.inputSchema;
+			i.inputSchema = undefined as any;
+			i.annotations = undefined as any;
+			return i;
+		});
+	filtered.push(emailToolSchema);
+	return filtered;
+}
+
+export function buildSessionConfig(mcpTools: any[]) {
+	return {
+		type: 'session.update',
+		session: {
+			instructions: SESSION_INSTRUCTIONS,
+			modalities: ['text', 'audio'],
+			turn_detection: { type: 'server_vad' },
+			voice: 'ash',
+			input_audio_transcription: { model: 'gpt-4o-transcribe', language: 'en' },
+			input_audio_format: 'g711_ulaw',
+			output_audio_format: 'g711_ulaw',
+			tools: mcpTools,
+		},
+	};
+}
+
+export function createOpenAIConnection(apiKey: string) {
+	return new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2025-06-03', [
+		'realtime',
+		'openai-insecure-api-key.' + apiKey,
+		'openai-beta.realtime-v1',
+	]);
+}
+
+export function buildTwimlResponse(host: string) {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+		<Say>Connected</Say>
+		<Connect>
+				<Stream url="wss://${host}/agents/my-agent/123/media-stream" />
+		</Connect>
+</Response>`;
 }
